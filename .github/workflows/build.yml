@@ -1,0 +1,115 @@
+name: Build firmware
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore: ["README.md", "android/**"]
+  workflow_dispatch:
+
+env:
+  ESP32_CORE: "3.1.0"       # 3.3.11은 IRAM 초과로 빌드 실패
+  NIMBLE_VER: "2.5.1"
+  ARDUINOJSON_VER: "7.4.2"
+  # Arduino IDE 도구 메뉴와 동일: ESP32S3 Dev Module / 16MB / OPI PSRAM / 3MB APP
+  FQBN: "esp32:esp32:esp32s3:FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # firmware 브랜치 푸시, 릴리스 생성
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      # 코어·라이브러리 캐시 (두 번째 빌드부터 빨라짐)
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries
+          key: arduino-esp32-${{ env.ESP32_CORE }}-nimble-${{ env.NIMBLE_VER }}-json-${{ env.ARDUINOJSON_VER }}
+
+      - name: Install core and libraries
+        run: |
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@${ESP32_CORE}
+          arduino-cli lib install "NimBLE-Arduino@${NIMBLE_VER}" "ArduinoJson@${ARDUINOJSON_VER}"
+
+      - name: Compile
+        run: |
+          arduino-cli compile --fqbn "$FQBN" --output-dir out --warnings default firmware/DoorKey
+          ls -la out
+
+      - name: Collect binaries
+        run: |
+          mkdir -p dist
+          SHA=$(git rev-parse --short HEAD)
+          # OTA용 (웹 UI › 시스템 › 파일로 직접 올리기)
+          cp out/DoorKey.ino.bin "dist/DoorKey_${SHA}_ota.bin"
+          # USB 전체 굽기용 (0x0 주소에 한 번에, 저장된 설정까지 지워짐)
+          if [ -f out/DoorKey.ino.merged.bin ]; then cp out/DoorKey.ino.merged.bin "dist/DoorKey_${SHA}_full.bin"; fi
+          # USB로 앱만 굽기용: 0xE000에 boot_app0.bin, 0x10000에 _ota.bin (저장된 설정 유지)
+          cp "$(find ~/.arduino15/packages/esp32/hardware/esp32 -name boot_app0.bin | head -1)" dist/boot_app0.bin
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DoorKey-firmware
+          path: dist/*.bin
+          retention-days: 30
+
+      # main 빌드: 최신 bin만 firmware 브랜치에 덮어쓰기 (이력 안 쌓임)
+      - name: Publish to firmware branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cd dist
+          git init -q
+          git checkout -q -b firmware
+          git add *.bin
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" \
+            commit -q -m "firmware ${GITHUB_SHA::7}"
+          git push -f -q "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" firmware
+
+      # 태그 빌드: 서명된 manifest와 함께 릴리스 → 기기가 확인·설치
+      - name: Sign and release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          OTA_SIGNING_KEY: ${{ secrets.OTA_SIGNING_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
+          V=$(grep -oP '#define FW_VERSION "\K[^"]+' firmware/DoorKey/config.h)
+          if [ "v$V" != "$TAG" ]; then echo "::error::태그($TAG)와 config.h FW_VERSION($V)이 다릅니다"; exit 1; fi
+          if [ -z "$OTA_SIGNING_KEY" ]; then echo "::error::OTA_SIGNING_KEY secret이 없습니다 (Settings › Secrets and variables › Actions)"; exit 1; fi
+
+          mkdir -p rel
+          cp out/DoorKey.ino.bin rel/DoorKey.bin
+          cp dist/boot_app0.bin rel/boot_app0.bin
+          NOTES=$(git log -1 --format=%s | cut -c1-120)
+          python3 - "$V" "$TAG" "$GITHUB_REPOSITORY" "$NOTES" <<'EOF'
+          import hashlib, json, sys
+          v, tag, repo, notes = sys.argv[1:5]
+          b = open("rel/DoorKey.bin", "rb").read()
+          m = {"version": v, "size": len(b), "sha256": hashlib.sha256(b).hexdigest(),
+               "bin": f"https://github.com/{repo}/releases/download/{tag}/DoorKey.bin", "notes": notes}
+          open("rel/manifest.json", "w").write(json.dumps(m, ensure_ascii=False, separators=(",", ":")))
+          EOF
+
+          # 서명 후, 펌웨어에 내장된 공개키로 다시 검증 (키가 어긋나면 릴리스 중단)
+          umask 077
+          printf '%s\n' "$OTA_SIGNING_KEY" > key.pem
+          openssl dgst -sha256 -sign key.pem -out sig.der rel/manifest.json
+          rm -f key.pem
+          openssl dgst -sha256 -verify firmware/ota_pub.pem -signature sig.der rel/manifest.json
+          base64 -w0 sig.der > rel/manifest.sig
+          rm -f sig.der
+          cat rel/manifest.json; echo
+
+          gh release create "$TAG" rel/DoorKey.bin rel/manifest.json rel/manifest.sig rel/boot_app0.bin \
+            --title "DoorKey $V" --notes "$NOTES"

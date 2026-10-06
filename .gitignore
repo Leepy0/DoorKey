@@ -1,0 +1,10 @@
+# Arduino 빌드 산출물
+firmware/DoorKey/build/
+*.bin
+*.elf
+*.map
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+.vscode/
