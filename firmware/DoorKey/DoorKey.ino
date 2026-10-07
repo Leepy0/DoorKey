@@ -29,6 +29,9 @@
 static bool apOn = false;
 static uint32_t staUpSinceMs = 0;
 static uint32_t staDownSinceMs = 0;
+static bool urlNotified = false;     // 이번 연결에서 접속 주소 알림을 보냈는가
+static uint32_t lastUrlNotifyMs = 0;
+static String lastUrl;
 
 static void startAp(const char* why) {
   if (apOn) return;
@@ -69,6 +72,20 @@ static void wifiLoop() {
       staUpSinceMs = now;
       Log::printf("Wi-Fi 연결됨: %s", WiFi.localIP().toString().c_str());
     }
+    // 연결 3초 뒤(DNS 준비) 웹 UI 주소를 알림으로 보낸다.
+    // 끊김이 반복될 때 알림이 쏟아지지 않도록 같은 주소는 10분 안에 다시 보내지 않는다.
+    if (!urlNotified && now - staUpSinceMs > 3000) {
+      urlNotified = true;
+      String url = "http://" + WiFi.localIP().toString();
+      if (url != lastUrl || !lastUrlNotifyMs || now - lastUrlNotifyMs > 600000) {
+        lastUrl = url;
+        lastUrlNotifyMs = now;
+        char m[160];
+        snprintf(m, sizeof(m), "DoorKey %s 네트워크 연결 — %s (%s, %d dBm)", FW_VERSION, url.c_str(),
+                 WiFi.SSID().c_str(), WiFi.RSSI());
+        Net::notify(m, url.c_str());
+      }
+    }
     // 정상 접속이 1분 유지되면 설정 AP를 끈다
     if (apOn && now - staUpSinceMs > 60000) {
       WiFi.softAPdisconnect(true);
@@ -79,6 +96,7 @@ static void wifiLoop() {
   } else {
     if (staUpSinceMs) Log::printf("Wi-Fi 끊김");
     staUpSinceMs = 0;
+    urlNotified = false;
     if (!staDownSinceMs) staDownSinceMs = now;
     // 2분 넘게 못 붙으면 설정 AP를 띄워 둔다 (공유기 교체 등)
     if (!apOn && now - staDownSinceMs > 120000) startAp("장시간 접속 실패");

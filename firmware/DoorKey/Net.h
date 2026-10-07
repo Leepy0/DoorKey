@@ -48,7 +48,7 @@ bool requestUnlock(const char* who, uint32_t detectMs, bool test);
 void requestCodeExchange(const String& code);
 void requestRefresh();
 void requestCheck();  // 대상 기기 상태 조회로 토큰·deviceId 확인
-void notify(const char* msg);
+void notify(const char* msg, const char* click = nullptr);  // click: 알림을 누르면 열 URL
 void requestTestNotify();
 void requestUpdCheck();    // 펌웨어 업데이트 확인
 void requestUpdInstall();  // 확인된 새 버전 설치 (1분 정도 다른 네트워크 작업 대기)

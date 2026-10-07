@@ -166,7 +166,7 @@ dialog p{margin:0 0 16px}
   <div class="card"><h2>정보</h2><div id="sysInfo" class="kv"></div></div>
   <div class="card"><h2>알림 (ntfy 등)</h2>
    <label>POST URL</label><input id="ntfy" class="mono" placeholder="https://ntfy.sh/내-비밀-토픽">
-   <div class="help">문 열림·인증 만료를 폰으로 받습니다. ntfy 앱에서 같은 토픽을 구독하세요. 비우면 끔.</div>
+   <div class="help">문 열림·인증 만료와, 네트워크에 연결될 때 웹 UI 주소(http://IP)를 폰으로 받습니다. ntfy 앱에서 같은 토픽을 구독하세요. 비우면 끔.</div>
    <div class="row mt"><button class="b p" onclick="saveNtfy(this)">저장</button><button class="b" onclick="post('/api/ntfy/test',{},this)">테스트</button></div></div>
   <div class="card"><h2>Wi-Fi</h2>
    <div class="grid"><div><label>SSID (2.4GHz)</label><input id="wSsid"></div><div><label>비밀번호</label><input id="wPass" type="password"></div></div>

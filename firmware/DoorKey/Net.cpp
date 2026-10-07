@@ -20,6 +20,7 @@ struct Job {
   uint32_t detectMs;
   char who[40];
   char text[200];
+  char link[48];   // Notify: 알림을 누르면 열 URL
 };
 
 static const char* API_HOST = "api.smartthings.com";
@@ -158,7 +159,7 @@ static int tokenRequest(const String& form, const String& oldRefresh, String& er
   return 200;
 }
 
-static void sendNotify(const char* msg);
+static void sendNotify(const char* msg, const char* click = nullptr);
 
 static bool refreshTokens(const char* why) {
   StTokens t = Store::getTokens();
@@ -389,7 +390,7 @@ static void doPresence(const Job& j) {
 
 // ---------------------------------------------------------------- 알림 (ntfy 등 HTTP POST)
 
-static void sendNotify(const char* msg) {
+static void sendNotify(const char* msg, const char* click) {
   String url = Store::ntfyUrl();
   if (url.isEmpty()) return;
   HTTPClient http;
@@ -409,6 +410,7 @@ static void sendNotify(const char* msg) {
     return;
   }
   http.addHeader("Title", "DoorKey");
+  if (click && *click) http.addHeader("Click", click);  // ntfy: 알림을 누르면 이 주소를 연다
   http.addHeader("Content-Type", "text/plain; charset=utf-8");
   int code = http.POST((uint8_t*)msg, strlen(msg));
   http.end();
@@ -481,7 +483,7 @@ static void handle(const Job& j) {
       if (!refreshTokens("수동")) Log::printf("수동 갱신 실패");
       break;
     case JobType::Check: doCheck(); break;
-    case JobType::Notify: sendNotify(j.text); break;
+    case JobType::Notify: sendNotify(j.text, j.link); break;
     case JobType::TestNotify: sendNotify("DoorKey 알림 테스트"); break;
     case JobType::UpdCheck: Ota::check(); break;
     case JobType::UpdInstall:
@@ -557,9 +559,10 @@ void requestCheck() {
   push(j);
 }
 
-void notify(const char* msg) {
+void notify(const char* msg, const char* click) {
   Job j = {};
   j.type = JobType::Notify;
+  strlcpy(j.link, click ? click : "", sizeof(j.link));
   strlcpy(j.text, msg, sizeof(j.text));
   push(j);
 }
