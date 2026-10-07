@@ -169,13 +169,13 @@ ntfy 앱 설치 → 추측하기 어려운 토픽 구독 → 웹 UI › 시스�
 - 웹 UI로 bin 파일을 직접 올려도 같은 롤백이 적용됩니다.
 
 **릴리스 만들기**
-1. `config.h`의 `FW_VERSION`을 올리고 커밋·push
-2. 같은 버전으로 태그: `git tag v1.0.4 && git push origin v1.0.4`
-3. Actions가 빌드 → `manifest.json` 서명 → 릴리스(`DoorKey.bin`, `manifest.json`, `manifest.sig`, `boot_app0.bin`) 생성
+1. `config.h`의 `FW_VERSION`을 올리고 `main`에 커밋·push
+2. 배포: `git push origin main:release` (또는 같은 버전의 태그 `git tag v1.0.4 && git push origin v1.0.4`)
+3. Actions가 빌드 → `manifest.json` 서명 → 릴리스 `v버전`(`DoorKey.bin`, `manifest.json`, `manifest.sig`, `boot_app0.bin`) 생성. 같은 버전 릴리스가 이미 있으면 실패합니다.
 
 서명용 비밀키는 저장소 Settings › Secrets and variables › Actions의 `OTA_SIGNING_KEY`에만 있습니다. 공개키는 `firmware/ota_pub.pem`과 `firmware/DoorKey/OtaKey.h`(내용 동일).
 
 **주의**
 - GitHub 계정을 가진 사람 = 펌웨어를 바꿀 수 있는 사람 = 현관문을 열 수 있는 사람입니다. **2단계 인증 필수.**
 - 키를 바꾸려면: 새 키 쌍을 만들고 `OtaKey.h`·`ota_pub.pem`을 바꾼 펌웨어를 **기존 키로 서명해 한 번 배포**한 뒤 secret을 교체합니다.
-- `main`에 push만 해서는 기기에 배포되지 않습니다. 태그를 붙인 릴리스만 배포됩니다.
+- `main`에 push만 해서는 기기에 배포되지 않습니다. `release` 브랜치 push나 태그로 만든 릴리스만 배포됩니다.

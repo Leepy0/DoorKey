@@ -2,7 +2,7 @@ name: Build firmware
 
 on:
   push:
-    branches: [main]
+    branches: [main, release]   # release 브랜치 push = 배포
     tags: ["v*"]
     paths-ignore: ["README.md", "android/**"]
   workflow_dispatch:
@@ -75,17 +75,18 @@ jobs:
             commit -q -m "firmware ${GITHUB_SHA::7}"
           git push -f -q "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" firmware
 
-      # 태그 빌드: 서명된 manifest와 함께 릴리스 → 기기가 확인·설치
+      # release 브랜치 또는 v* 태그: 서명된 manifest와 함께 릴리스 → 기기가 확인·설치
       - name: Sign and release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/release'
         env:
           OTA_SIGNING_KEY: ${{ secrets.OTA_SIGNING_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="$GITHUB_REF_NAME"
           V=$(grep -oP '#define FW_VERSION "\K[^"]+' firmware/DoorKey/config.h)
-          if [ "v$V" != "$TAG" ]; then echo "::error::태그($TAG)와 config.h FW_VERSION($V)이 다릅니다"; exit 1; fi
+          TAG="v$V"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$GITHUB_REF_NAME" != "$TAG" ]; then echo "::error::태그($GITHUB_REF_NAME)와 config.h FW_VERSION($V)이 다릅니다"; exit 1; fi
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "::error::$TAG 릴리스가 이미 있습니다 — config.h FW_VERSION을 올리세요"; exit 1; fi
           if [ -z "$OTA_SIGNING_KEY" ]; then echo "::error::OTA_SIGNING_KEY secret이 없습니다 (Settings › Secrets and variables › Actions)"; exit 1; fi
 
           mkdir -p rel
@@ -112,4 +113,4 @@ jobs:
           cat rel/manifest.json; echo
 
           gh release create "$TAG" rel/DoorKey.bin rel/manifest.json rel/manifest.sig rel/boot_app0.bin \
-            --title "DoorKey $V" --notes "$NOTES"
+            --title "DoorKey $V" --notes "$NOTES" --target "$GITHUB_SHA"
