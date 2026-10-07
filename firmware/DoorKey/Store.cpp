@@ -111,6 +111,7 @@ void saveDevices() {
     o["irk"] = hex;
     o["enabled"] = D[i].enabled;
     o["id"] = D[i].idAddr;
+    o["pres"] = D[i].presId;
   }
   String s;
   serializeJson(doc, s);
@@ -133,6 +134,7 @@ static void loadDevices() {
     d.enabled = o["enabled"] | true;
     setName(d.name, sizeof(d.name), o["name"] | "기기");
     strlcpy(d.idAddr, o["id"] | "", sizeof(d.idAddr));
+    strlcpy(d.presId, o["pres"] | "", sizeof(d.presId));
     memcpy(d.irk, irk, 16);
   }
 }
@@ -168,6 +170,14 @@ bool updateDevice(int slot, const char* name, bool enabled) {
   if (slot < 0 || slot >= MAX_DEVICES || !D[slot].used) return false;
   if (name && *name) setName(D[slot].name, sizeof(D[slot].name), name);
   D[slot].enabled = enabled;
+  saveDevices();
+  return true;
+}
+
+bool setPresId(int slot, const char* id) {
+  if (slot < 0 || slot >= MAX_DEVICES || !D[slot].used) return false;
+  if (strcmp(D[slot].presId, id ? id : "") == 0) return false;
+  strlcpy(D[slot].presId, id ? id : "", sizeof(D[slot].presId));
   saveDevices();
   return true;
 }
@@ -279,6 +289,7 @@ void exportJson(JsonDocument& doc) {
     o["irk"] = hex;
     o["enabled"] = D[i].enabled;
     o["id"] = D[i].idAddr;
+    o["pres"] = D[i].presId;
   }
   StConf c = getSt();
   JsonObject st = root["st"].to<JsonObject>();
@@ -319,6 +330,7 @@ bool importJson(JsonDocument& doc, String& err) {
     nd[n].enabled = o["enabled"] | true;
     setName(nd[n].name, sizeof(nd[n].name), o["name"] | "기기");
     strlcpy(nd[n].idAddr, o["id"] | "", sizeof(nd[n].idAddr));
+    strlcpy(nd[n].presId, o["pres"] | "", sizeof(nd[n].presId));
     memcpy(nd[n].irk, irk, 16);
     n++;
   }

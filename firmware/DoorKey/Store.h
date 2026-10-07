@@ -26,6 +26,7 @@ struct Device {
   char name[40] = {0};  // UTF-8, 한글 약 12자
   uint8_t irk[16] = {0};  // 빅엔디언
   char idAddr[18] = {0};  // 페어링 때 받은 폰의 신원 주소 (수동 추가면 빈 값)
+  char presId[40] = {0};  // SmartThings 폰 위치(재실) 기기 ID. 비우면 위치 확인 안 함
 };
 
 struct StConf {
@@ -51,6 +52,7 @@ bool paramsFromJson(JsonObjectConst o, String& err);
 Device* devices();  // MAX_DEVICES 크기 배열
 int addDevice(const char* name, const uint8_t irkBE[16], const char* idAddr = "");  // 반환: 슬롯, 실패 -1. 같은 IRK면 갱신
 bool updateDevice(int slot, const char* name, bool enabled);
+bool setPresId(int slot, const char* id);  // 반환: 바뀌었으면 true
 bool deleteDevice(int slot);
 void saveDevices();
 

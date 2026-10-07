@@ -10,6 +10,7 @@ namespace Presence {
 
 static Rt R[MAX_DEVICES];
 static uint32_t lastUnlockReqMs = 0;
+static uint32_t presNextMs[MAX_DEVICES];  // 다음 위치 조회 시각 (millis)
 
 static const char* devName(int slot) { return Store::devices()[slot].name; }
 
@@ -31,6 +32,7 @@ static void setSt(int slot, St s, const char* fmt, ...) {
   va_end(ap);
   Log::utf8Fix(r.lastEvent);
   if (s == St::Home && r.st != St::Home) r.maxGapMs = 0;
+  if (s == St::Away && r.st != St::Away) presNextMs[slot] = millis();  // 외출 판정 즉시 위치 조회
   r.st = s;
   r.stSinceMs = millis();
   Log::printf("[%s] %s", devName(slot), r.lastEvent);
@@ -88,6 +90,48 @@ static void rememberAddr(Rt& r, const uint8_t a[6]) {
   if (r.recentN < 16) r.recentN++;
 }
 
+// ---------------------------------------------------------------- SmartThings 폰 위치
+
+const char* gateName(Gate g) {
+  switch (g) {
+    case Gate::Stale: return "stale";
+    case Gate::Ok: return "ok";
+    case Gate::Wait: return "wait";
+    default: return "off";
+  }
+}
+
+Gate gate(int slot) {
+  if (slot < 0 || slot >= MAX_DEVICES || !Store::devices()[slot].presId[0]) return Gate::Off;
+  Net::Pres p = Net::pres(slot);
+  uint32_t now = millis();
+  if (!p.okMs || now - p.okMs > PRES_STALE_SEC * 1000UL) return Gate::Stale;
+  const Rt& r = R[slot];
+  // 이번 외출(BLE 마지막 감지) 이후의 조회에서 '외출'을 봤는가
+  if (!p.awaySeenMs || (int32_t)(p.awaySeenMs - r.awaySinceMs) < 0) return Gate::Wait;
+  // 그 '외출'이 이번에 나간 것인가: 집에 온 뒤 SmartThings 반영이 늦어 남아 있던 예전 '외출'은 제외
+  if (r.awayExact && p.awaySince) {
+    time_t t = time(nullptr);
+    if (t > 1700000000) {
+      uint32_t awayStart = (uint32_t)t - (now - r.awaySinceMs) / 1000;
+      if (p.awaySince + PRES_EARLY_SEC < awayStart) return Gate::Wait;
+    }
+  }
+  return Gate::Ok;
+}
+
+void presPollNow() {
+  for (int i = 0; i < MAX_DEVICES; i++) presNextMs[i] = millis();
+}
+
+// 외출 중이면 30초, 그 외 5분마다 조회 (조회는 net 태스크가 한다)
+static void presPoll(int slot, const Rt& r, uint32_t now) {
+  const Device& dv = Store::devices()[slot];
+  if (!dv.presId[0] || (int32_t)(now - presNextMs[slot]) < 0) return;
+  if (Net::requestPresence(slot, dv.name, dv.presId))
+    presNextMs[slot] = now + (r.st == St::Away ? PRES_POLL_AWAY_SEC : PRES_POLL_HOME_SEC) * 1000UL;
+}
+
 // ---------------------------------------------------------------- 판정
 
 static bool inActiveHours(const Params& P) {
@@ -127,10 +171,21 @@ static void handleArrival(int slot, Rt& r, const Ble::Det& d, const Params& P) {
   } else if (lastUnlockReqMs && d.ms - lastUnlockReqMs < P.cooldownSec * 1000UL) {
     setSt(slot, St::Home, "귀가 (쿨다운 — 직전에 이미 열림)");
   } else {
+    Gate g = gate(slot);
+    if (g == Gate::Wait) {
+      setSt(slot, St::Home, "귀가 감지, SmartThings상 집을 떠난 기록 없음 → 열지 않음");
+      if (P.notifyUnlock) {
+        char m[200];
+        snprintf(m, sizeof(m), "%s 귀가 감지 — SmartThings 위치상 집을 떠난 적이 없어 문을 열지 않았습니다", devName(slot));
+        Net::notify(m);
+      }
+      return;
+    }
     lastUnlockReqMs = d.ms;
     Net::requestUnlock(devName(slot), d.ms, false);
     Led::set(0, 60, 0, 3000);
-    setSt(slot, St::Home, "귀가 %d dBm, 외출 %lu분 → 문 열기", d.rssi, (unsigned long)(awaySec / 60));
+    setSt(slot, St::Home, "귀가 %d dBm, 외출 %lu분 → 문 열기%s", d.rssi, (unsigned long)(awaySec / 60),
+          g == Gate::Ok ? " (SmartThings 외출 확인)" : g == Gate::Stale ? " (SmartThings 조회 안 됨, BLE만)" : "");
   }
 }
 
@@ -183,6 +238,7 @@ void tick() {
       r.lastExitPeak = pk;
       if (pk >= P.exitRssi) {
         r.awaySinceMs = r.lastSeenMs;
+        r.awayExact = true;
         setSt(slot, St::Away, "외출 판정 (직전 최대 %d dBm)", pk);
       } else {
         setSt(slot, St::Lost, "신호 끊김, 직전 최대 %d < %d dBm → 집 안으로 판단", pk, P.exitRssi);
@@ -192,10 +248,12 @@ void tick() {
       uint32_t wait = max<uint32_t>(P.minAwaySec, P.absentSec) * 1000UL;
       if (now - r.stSinceMs > wait) {
         r.awaySinceMs = r.stSinceMs;
+        r.awayExact = false;
         setSt(slot, St::Away, "시작 후 계속 미감지 → 외출로 간주");
       }
     }
     if (r.st == St::Away) anyAway = true;
+    presPoll(slot, r, now);
   }
   Net::setAnyAway(anyAway);
 }
@@ -204,12 +262,15 @@ void resetSlot(int slot) {
   if (slot < 0 || slot >= MAX_DEVICES) return;
   R[slot] = Rt();
   R[slot].stSinceMs = millis();
+  presNextMs[slot] = 0;
+  Net::presReset(slot);
 }
 
 bool forceState(int slot, bool away) {
   if (slot < 0 || slot >= MAX_DEVICES || !Store::devices()[slot].used) return false;
   if (away) {
     R[slot].awaySinceMs = millis();
+    R[slot].awayExact = false;
     setSt(slot, St::Away, "수동: 외출로 설정");
   } else {
     setSt(slot, St::Home, "수동: 재실로 설정");

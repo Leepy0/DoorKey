@@ -30,6 +30,18 @@ struct Status {
   char checkBody[160];
 };
 
+// SmartThings 폰 위치(presenceSensor) 조회 결과
+struct Pres {
+  int8_t val;            // -1 모름, 0 외출(not present), 1 집(present)
+  uint32_t since;        // 그 값이 된 시각 (SmartThings timestamp, epoch). 0 = 모름
+  uint32_t okMs;         // 마지막 조회 성공 (millis, 0 = 없음)
+  uint32_t tryMs;        // 마지막 조회 시도 (millis, 0 = 없음)
+  uint32_t awaySeenMs;   // 마지막으로 '외출'을 본 조회 시각 (millis, 0 = 없음)
+  uint32_t awaySince;    // 그때 SmartThings가 알려준 외출 시작 시각 (epoch)
+  int code;              // 마지막 HTTP 코드
+  char err[96];          // 마지막 조회 오류 (성공하면 빈 문자열)
+};
+
 void begin();
 
 bool requestUnlock(const char* who, uint32_t detectMs, bool test);
@@ -40,6 +52,11 @@ void notify(const char* msg);
 void requestTestNotify();
 void requestUpdCheck();    // 펌웨어 업데이트 확인
 void requestUpdInstall();  // 확인된 새 버전 설치 (1분 정도 다른 네트워크 작업 대기)
+
+// 폰 위치 조회 요청. 이미 조회 중이거나 Wi-Fi·토큰이 없거나 큐가 붐비면 false (다음에 다시 시도)
+bool requestPresence(int slot, const char* name, const char* deviceId);
+void presReset(int slot);  // 기기 ID가 바뀌거나 슬롯이 초기화될 때
+Pres pres(int slot);
 
 void setAnyAway(bool v);
 Status status();

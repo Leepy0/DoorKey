@@ -6,7 +6,7 @@
 // - 공장 초기화: 웹 UI > 시스템 > 설정 초기화
 // ============================================================================
 
-#define FW_VERSION "1.0.3"
+#define FW_VERSION "1.0.4"
 
 // ---- Wi-Fi (비워두면 설정용 AP로 부팅, ESP32는 2.4GHz만 접속 가능) ----
 #define DEFAULT_WIFI_SSID ""
@@ -42,6 +42,12 @@
 #define DEFAULT_ST_COMMAND    "unlock"
 #define DEFAULT_ST_ARGS       "[]"
 #define DEFAULT_ST_REDIRECT   "https://httpbin.org/get"
+
+// ---- SmartThings 폰 위치로 외출 확인 (기기별 위치 기기 ID를 넣었을 때만) ----
+#define PRES_POLL_AWAY_SEC 30   // 외출 판정 중 조회 주기
+#define PRES_POLL_HOME_SEC 300  // 그 외 조회 주기 (화면 표시용)
+#define PRES_STALE_SEC     180  // 이 시간 넘게 조회에 실패하면 위치 확인 없이 BLE로만 판단
+#define PRES_EARLY_SEC     600  // SmartThings 외출 시각이 BLE 마지막 감지보다 이만큼 앞서도 이번 외출로 인정
 
 // ---- 펌웨어 업데이트 (GitHub Releases, 서명 확인 후 웹 UI에서 설치) ----
 #define OTA_REPO         "Leepy0/DoorKey"

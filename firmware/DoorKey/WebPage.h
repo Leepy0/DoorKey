@@ -30,6 +30,7 @@ main{max-width:760px;margin:0 auto;padding:12px 16px 60px}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
 .badge{font-size:12px;font-weight:600;padding:2px 8px;border-radius:6px;background:var(--chip)}
 .b-home{color:var(--ok)}.b-away{color:var(--acc)}.b-lost{color:var(--warn)}.b-unknown{color:var(--mute)}
+.c-ok{color:var(--ok)}.c-acc{color:var(--acc)}.c-warn{color:var(--warn)}.c-bad{color:var(--bad)}.c-mute{color:var(--mute)}
 canvas{width:100%;height:70px;display:block;margin:8px 0 4px;border-radius:6px;background:var(--chip)}
 button.b{background:var(--chip);color:var(--fg);border:1px solid var(--line);border-radius:8px;min-height:48px;padding:0 16px;font-size:14px;cursor:pointer}
 button.p{background:var(--acc);color:var(--on-acc);border-color:var(--acc)}
@@ -151,6 +152,14 @@ dialog p{margin:0 0 16px}
    <label>Arguments (JSON 배열)</label><input id="sArgs" class="mono">
    <div class="help">직접 호출이 거부되면 가상 스위치로 바꾸세요: Device ID = 가상 스위치, Capability = switch, Command = on</div>
    <div class="row mt"><button class="b p" onclick="saveSt(this)">저장</button></div></div>
+  <div class="card"><h2>4. 폰 위치로 외출 확인 (선택)</h2>
+   <div class="help">집 안에서 블루투스 신호만 끊겨 '외출'로 잘못 판정돼도 문이 열리지 않게 합니다. 위치 기기 ID를 넣은 사람은 이번 외출 중 SmartThings에서 '외출'이 확인돼야 귀가 시 문을 엽니다. SmartThings 조회가 3분 넘게 안 되면 블루투스만으로 판단합니다.</div>
+   <div id="presList" class="mt"></div>
+   <div class="row mt"><button class="b p" onclick="savePres(this)">저장</button><button class="b" onclick="post('/api/pres/check',{},this)">지금 조회</button></div>
+   <details class="mt"><summary class="mute">위치 기기 ID 찾는 법</summary><ol class="steps mute small">
+    <li>폰의 SmartThings 앱에서 이 폰의 위치(재실) 사용을 켜고, 앱 위치 권한을 '항상 허용'으로 둡니다.</li>
+    <li>my.smartthings.com/advanced › Devices에서 폰 이름의 기기를 엽니다. (presenceSensor가 있는 기기)</li>
+    <li>Device ID(8-4-4-4-12자리)를 복사해 위 칸에 붙여넣고 저장합니다. 칸 아래에 '집' 또는 '외출'이 나오면 정상입니다.</li></ol></details></div>
  </section>
 
  <section id="t-sys" class="hide">
@@ -247,11 +256,11 @@ function renderHome(){const box=$("devCards");
  else{ if(box.children.length!=S.devices.length||box.dataset.k!=S.devices.map(d=>d.slot).join()){box.dataset.k=S.devices.map(d=>d.slot).join();
   box.innerHTML=S.devices.map(d=>`<div class="card" id="dc${d.slot}"><div class="row"><b class="nm"></b><span class="badge st"></span><span class="sp"></span>
   <span class="nw"><button class="b s" onclick="post('/api/device/state',{slot:${d.slot},away:true},this)">외출로</button><button class="b s" onclick="post('/api/device/state',{slot:${d.slot},away:false},this)">재실로</button></span></div>
-  <canvas></canvas><div class="mute small l1"></div><div class="small l2"></div></div>`).join("")}
+  <canvas></canvas><div class="mute small l1"></div><div class="small l2"></div><div class="small l3"></div></div>`).join("")}
   S.devices.forEach(d=>{const c=$("dc"+d.slot);c.querySelector(".nm").textContent=d.name+(d.enabled?"":" (비활성)");
    const s=c.querySelector(".st");s.className="badge st b-"+d.st;s.textContent=ST[d.st]+" · "+dur(d.stFor);
    c.querySelector(".l1").textContent=(d.seenAgo<0?"감지 기록 없음":`감지 ${ago(d.seenAgo)} · ${d.rssi} dBm (평균 ${d.ema}) · 간격 ${d.itv}ms · 최대 공백 ${d.maxGap}초`)+(d.exitPeak>-127?` · 이탈 peak ${d.exitPeak}`:"");
-   c.querySelector(".l2").textContent=d.event||"";spark(c.querySelector("canvas"),d.spark)})}
+   c.querySelector(".l2").textContent=d.event||"";c.querySelector(".l3").innerHTML=presLine(d);spark(c.querySelector("canvas"),d.spark)})}
  const m=S.st.cmd;$("lastCmd").innerHTML=m.code?`<b>${esc(m.who)}</b> · HTTP <b style="color:${m.code>=200&&m.code<300?"var(--ok)":"var(--bad)"}">${m.code}</b> · 요청 ${m.http}ms · 감지 후 ${m.total}ms · ${ago(m.ago)}<div class="mono mute">${esc(m.body)}</div>`:"없음"}
 
 function spark(cv,v){const dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;if(!w)return;cv.width=w*dpr;cv.height=h*dpr;const g=cv.getContext("2d");g.scale(dpr,dpr);
@@ -278,7 +287,30 @@ function renderSt(){const s=S.st;$("stState").innerHTML=[
  ["액세스 토큰 만료",s.expIn<0?"—":dur(s.expIn)+" 후"],["마지막 갱신",s.refAgo<0?"이번 부팅엔 없음":ago(s.refAgo)+" (HTTP "+s.refCode+")"],
  ["연결 유지",(s.warm?"연결됨":"끊김")+` · 연결 ${s.warmN}회 · 평균 유지 ${s.warmLife}초 · TLS ${s.tls}ms`],
  ["연결 확인",s.check.code?`HTTP ${s.check.code} · ${ago(s.check.ago)}`:"—"],["",`<span class="mono">${esc(s.check.body)}</span>`],
- ["오류",esc(s.err)||"—"]].map(([k,v])=>`<div>${k}</div><div>${v}</div>`).join("")}
+ ["오류",esc(s.err)||"—"]].map(([k,v])=>`<div>${k}</div><div>${v}</div>`).join("");renderPres()}
+
+// SmartThings 폰 위치
+const PRES_STALE=180,UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const GATE={ok:["c-ok","외출 확인됨 — 귀가하면 문을 엽니다"],wait:["c-warn","SmartThings상 아직 집 — 이대로 들어오면 문을 열지 않습니다"]};
+function fmtT(e){if(!e)return"";const t=new Date(e*1000),p=n=>String(n).padStart(2,"0");return`${p(t.getMonth()+1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}`}
+function presText(d){const p=d.pres;
+ if(!d.presId)return["c-mute","위치 확인 안 함 — 블루투스만으로 판단"];
+ if(!p||(p.ok<0&&p.try<0))return["c-mute","조회 대기 중…"];
+ if(p.ok<0)return["c-bad","조회 실패: "+(p.err||"HTTP "+p.code)+" — 블루투스만으로 판단"];
+ let s="SmartThings 위치: "+(p.val==1?"집":"외출")+(p.since?` (${fmtT(p.since)}부터)`:"")+" · "+ago(p.ok)+" 확인";
+ if(p.ok>PRES_STALE)return["c-warn",s+" — 오래됨"+(p.err?` (최근 조회 실패: ${p.err})`:"")+", 블루투스만으로 판단"];
+ return[p.val==1?"c-ok":"c-acc",s]}
+function presLine(d){if(!d.presId)return"";const[c,t]=presText(d);let h=`<span class="${c}">${esc(t)}</span>`;
+ const g=d.st=="away"&&d.pres&&d.pres.gate!="stale"&&GATE[d.pres.gate];if(g)h+=`<br><b class="${g[0]}">${esc(g[1])}</b>`;return h}
+function renderPres(){const L=$("presList");
+ if(!S.devices.length){L.dataset.k="";L.innerHTML='<div class="mute">등록된 기기가 없습니다. 기기 탭에서 먼저 폰을 등록하세요.</div>';return}
+ const key=S.devices.map(d=>d.slot+":"+d.name+":"+d.presId).join("|");
+ if(L.dataset.k!==key){L.dataset.k=key;L.innerHTML=S.devices.map(d=>`<div class="dev"><label for="pi${d.slot}">${esc(d.name)} — 위치 기기 ID</label>
+  <input id="pi${d.slot}" class="mono" value="${esc(d.presId)}" placeholder="비우면 위치 확인 안 함" autocomplete="off" spellcheck="false" autocapitalize="off"><div class="small" id="pr${d.slot}"></div></div>`).join("")}
+ S.devices.forEach(d=>{const e=$("pr"+d.slot);if(e){const[c,t]=presText(d);e.className="small "+c;e.textContent=t}})}
+function savePres(btn){const items=S.devices.map(d=>{const e=$("pi"+d.slot);return{slot:d.slot,id:e?e.value.trim():""}});
+ const bad=items.find(i=>i.id&&!UUID.test(i.id));if(bad){const d=S.devices.find(x=>x.slot==bad.slot);$("pi"+bad.slot).focus();return toast(`${d.name}: ID는 8-4-4-4-12자리 형식이어야 합니다`)}
+ post("/api/pres",{items},btn)}
 
 function renderSys(){$("sysInfo").innerHTML=[["IP",S.ip],["Wi-Fi",S.ssid+(S.rssi?` (${S.rssi} dBm)`:"")],["가동",dur(S.uptime)],["힙",`${Math.round(S.heap/1024)}KB (최소 ${Math.round(S.minHeap/1024)}KB)`],["PSRAM",Math.round(S.psram/1024)+"KB"],
  ["BLE 광고",`${S.ble.adv} (RPA ${S.ble.rpa}, 캐시 ${S.ble.hit}, 누락 ${S.ble.drop})`],["펌웨어",S.fw]].map(([k,v])=>`<div>${k}</div><div>${esc(v)}</div>`).join("");

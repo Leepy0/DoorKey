@@ -11,6 +11,7 @@
 //  LOST ──감지──> HOME
 //  AWAY ──RSSI >= arriveRssi 감지 ×confirmCount──> HOME + 문 열기
 //         (단, 짧은 외출 / 이전 주소 재등장 / 비활성 시간대면 문 열기 생략)
+//         (폰 위치 기기 ID가 있으면: 이번 외출 중 SmartThings에서 '외출'을 본 적이 없을 때도 생략)
 namespace Presence {
 
 enum class St : uint8_t { Unknown, Home, Lost, Away };
@@ -20,6 +21,7 @@ struct Rt {
   uint32_t stSinceMs = 0;
   uint32_t lastSeenMs = 0;
   uint32_t awaySinceMs = 0;
+  bool awayExact = false;  // BLE로 현관 이탈을 보고 들어간 외출 (부팅 직후·수동 전환은 false)
   int8_t lastRssi = -127;
   float ema = -127;
   float itvEma = 0;        // 광고 수신 간격 평균 (ms)
@@ -46,5 +48,15 @@ bool forceState(int slot, bool away);  // 웹 UI 수동 전환
 const Rt& rt(int slot);
 const char* stName(St s);
 void spark(int slot, int8_t out[60]);  // 최근 60초 RSSI
+
+// SmartThings 폰 위치로 외출 확인 (귀가 시 문 열기 조건)
+//  Off   : 위치 기기 ID 없음 → BLE로만 판단
+//  Stale : 조회가 PRES_STALE_SEC 넘게 실패 → BLE로만 판단
+//  Ok    : 이번 외출 중 SmartThings '외출'을 확인 → 귀가하면 연다
+//  Wait  : 아직 SmartThings상 집 → 이대로 귀가하면 열지 않는다
+enum class Gate : uint8_t { Off, Stale, Ok, Wait };
+Gate gate(int slot);
+const char* gateName(Gate g);
+void presPollNow();  // 모든 기기의 위치를 바로 조회
 
 }  // namespace Presence

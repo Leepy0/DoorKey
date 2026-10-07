@@ -145,6 +145,18 @@ static void hStatus() {
     o["exitPeak"] = r.lastExitPeak;
     o["addr"] = addr;
     o["event"] = r.lastEvent;
+    o["presId"] = D[i].presId;
+    if (D[i].presId[0]) {
+      Net::Pres p = Net::pres(i);
+      JsonObject pr = o["pres"].to<JsonObject>();
+      pr["val"] = p.val;
+      pr["since"] = p.since;
+      pr["ok"] = agoSec(p.okMs);
+      pr["try"] = agoSec(p.tryMs);
+      pr["code"] = p.code;
+      pr["err"] = p.err;
+      pr["gate"] = Presence::gateName(Presence::gate(i));
+    }
     int8_t sp[60];
     Presence::spark(i, sp);
     JsonArray a = o["spark"].to<JsonArray>();
@@ -339,6 +351,44 @@ static void hDeviceState() {
   ok();
 }
 
+// SmartThings 기기 ID 형식 (8-4-4-4-12 16진수)
+static bool validUuid(const String& s) {
+  if (s.length() != 36) return false;
+  for (int i = 0; i < 36; i++) {
+    bool dash = i == 8 || i == 13 || i == 18 || i == 23;
+    if (dash ? s[i] != '-' : !isxdigit((unsigned char)s[i])) return false;
+  }
+  return true;
+}
+
+// 폰 위치 기기 ID 저장: {"items":[{"slot":0,"id":"..."}]}  (빈 id = 위치 확인 끔)
+static void hPres() {
+  if (!auth()) return;
+  JsonDocument d;
+  if (!body(d)) return;
+  JsonArrayConst items = d["items"].as<JsonArrayConst>();
+  for (JsonObjectConst it : items) {
+    int slot = it["slot"] | -1;
+    String id = it["id"] | "";
+    id.trim();
+    id.toLowerCase();
+    if (slot < 0 || slot >= MAX_DEVICES || !Store::devices()[slot].used) return fail("기기 없음");
+    if (id.length() && !validUuid(id)) return fail(String(Store::devices()[slot].name) + ": ID 형식이 아닙니다 (8-4-4-4-12자리)");
+  }
+  for (JsonObjectConst it : items) {
+    int slot = it["slot"];
+    String id = it["id"] | "";
+    id.trim();
+    id.toLowerCase();
+    if (Store::setPresId(slot, id.c_str())) {
+      Net::presReset(slot);
+      Log::printf("[%s] 위치 기기 %s", Store::devices()[slot].name, id.length() ? "설정" : "해제");
+    }
+  }
+  Presence::presPollNow();
+  ok("저장됨 — 위치를 조회합니다");
+}
+
 static void hNtfy() {
   if (!auth()) return;
   JsonDocument d;
@@ -459,6 +509,12 @@ void begin() {
   server.on("/api/device/update", HTTP_POST, hDeviceUpdate);
   server.on("/api/device/delete", HTTP_POST, hDeviceDelete);
   server.on("/api/device/state", HTTP_POST, hDeviceState);
+  server.on("/api/pres", HTTP_POST, hPres);
+  server.on("/api/pres/check", HTTP_POST, [] {
+    if (!auth()) return;
+    Presence::presPollNow();
+    ok("위치 조회 중");
+  });
   server.on("/api/ntfy", HTTP_POST, hNtfy);
   server.on("/api/ntfy/test", HTTP_POST, [] {
     if (!auth()) return;

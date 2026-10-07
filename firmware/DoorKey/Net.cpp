@@ -11,10 +11,12 @@
 
 namespace Net {
 
-enum class JobType : uint8_t { Unlock, TestUnlock, Exchange, Refresh, Check, Notify, TestNotify, UpdCheck, UpdInstall };
+enum class JobType : uint8_t { Unlock, TestUnlock, Exchange, Refresh, Check, Notify, TestNotify, UpdCheck, UpdInstall, Presence };
 
 struct Job {
   JobType type;
+  int8_t slot;     // Presence: 기기 슬롯
+  uint16_t gen;    // Presence: 요청 당시 세대 (도중에 ID가 바뀌면 결과 버림)
   uint32_t detectMs;
   char who[40];
   char text[200];
@@ -36,6 +38,11 @@ static bool warmWas = false;
 static uint32_t warmSinceMs = 0, lastWarmTryMs = 0, warmLifeN = 0;
 static uint64_t warmLifeSum = 0;
 static bool warmFailLogged = false;
+
+// 폰 위치 조회 결과 (sMtx로 보호)
+static Pres PR[MAX_DEVICES];
+static uint16_t presGen[MAX_DEVICES];
+static volatile bool presBusy[MAX_DEVICES];
 
 struct SLock {
   SLock() { xSemaphoreTake(sMtx, portMAX_DELAY); }
@@ -305,6 +312,81 @@ static void doCheck() {
   Log::utf8Fix(S.checkBody);
 }
 
+// ---------------------------------------------------------------- 폰 위치 (presenceSensor)
+
+// "2026-10-07T05:12:33.123Z" → epoch (UTC). 실패하면 0
+static uint32_t parseIso(const char* s) {
+  int Y, M, D, h, m, sec;
+  if (!s || sscanf(s, "%4d-%2d-%2dT%2d:%2d:%2d", &Y, &M, &D, &h, &m, &sec) != 6 || Y < 2020) return 0;
+  Y -= M <= 2;  // 그레고리력 날짜 → 1970-01-01 기준 일수
+  int era = Y / 400, yoe = Y - era * 400;
+  int doy = (153 * (M + (M > 2 ? -3 : 9)) + 2) / 5 + D - 1;
+  int doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  int64_t days = (int64_t)era * 146097 + doe - 719468;
+  return (uint32_t)(days * 86400 + h * 3600 + m * 60 + sec);
+}
+
+static void doPresence(const Job& j) {
+  StTokens t = Store::getTokens();
+  String path = String("/v1/devices/") + j.text + "/components/main/capabilities/presenceSensor/status";
+  String resp;
+  int code = apiRequest("GET", path, "", nullptr, "Bearer " + t.access, resp);
+  if (code == 401 && refreshTokens("401 응답")) {
+    t = Store::getTokens();
+    code = apiRequest("GET", path, "", nullptr, "Bearer " + t.access, resp);
+  }
+
+  int8_t val = -1;
+  uint32_t since = 0;
+  char err[96] = "";
+  if (code == 200) {
+    JsonDocument doc;
+    if (deserializeJson(doc, resp)) {
+      strlcpy(err, "응답을 읽지 못함", sizeof(err));
+    } else {
+      const char* v = doc["presence"]["value"] | "";
+      if (!strcmp(v, "present")) val = 1;
+      else if (!strcmp(v, "not present")) val = 0;
+      else strlcpy(err, "위치 값 없음 — 폰 위치 기기 ID가 맞는지 확인", sizeof(err));
+      since = parseIso(doc["presence"]["timestamp"] | "");
+    }
+  } else if (code == 403 || code == 404) {
+    snprintf(err, sizeof(err), "HTTP %d — 이 토큰으로 볼 수 없는 기기 (ID 확인)", code);
+  } else {
+    snprintf(err, sizeof(err), "HTTP %d", code);
+  }
+
+  int slot = j.slot;
+  int8_t prevVal;
+  bool prevErr;
+  {
+    SLock l;
+    presBusy[slot] = false;
+    if (j.gen != presGen[slot]) return;  // 조회 중에 ID가 바뀜
+    Pres& p = PR[slot];
+    prevVal = p.val;
+    prevErr = p.err[0] != 0;
+    p.tryMs = millis();
+    p.code = code;
+    strlcpy(p.err, err, sizeof(p.err));
+    if (val >= 0) {
+      p.val = val;
+      p.since = since;
+      p.okMs = millis();
+      if (val == 0) {
+        p.awaySeenMs = millis();
+        p.awaySince = since;
+      }
+    }
+  }
+  if (val >= 0 && val != prevVal) {
+    String at = since ? Log::stamp(since, 0) : String("시각 모름");
+    Log::printf("[%s] SmartThings 위치: %s (%s부터)", j.who, val ? "집" : "외출", at.c_str());
+  } else if (val < 0 && !prevErr) {
+    Log::printf("[%s] SmartThings 위치 조회 실패: %s", j.who, err);
+  }
+}
+
 // ---------------------------------------------------------------- 알림 (ntfy 등 HTTP POST)
 
 static void sendNotify(const char* msg) {
@@ -406,6 +488,7 @@ static void handle(const Job& j) {
       api->stop();  // TLS 메모리 확보
       Ota::install();
       break;
+    case JobType::Presence: doPresence(j); break;
   }
 }
 
@@ -424,6 +507,8 @@ static void task(void*) {
     if (xQueueReceive(q, &j, pdMS_TO_TICKS(500)) == pdTRUE) {
       if (WiFi.isConnected()) {
         handle(j);
+      } else if (j.type == JobType::Presence) {
+        presBusy[j.slot] = false;  // 주기 조회라 조용히 건너뜀
       } else {
         Log::printf("Wi-Fi 끊김 — 네트워크 작업 %d 건너뜀", (int)j.type);
       }
@@ -497,6 +582,45 @@ void requestUpdInstall() {
   push(j);
 }
 
+bool requestPresence(int slot, const char* name, const char* deviceId) {
+  if (slot < 0 || slot >= MAX_DEVICES || !q || presBusy[slot] || !WiFi.isConnected()) return false;
+  if (uxQueueSpacesAvailable(q) < 3) return false;  // 문 열기 자리를 남겨 둔다
+  Job j = {};
+  {
+    SLock l;
+    if (!S.hasToken || S.authBroken) return false;
+    j.gen = presGen[slot];
+  }
+  j.type = JobType::Presence;
+  j.slot = slot;
+  strlcpy(j.who, name, sizeof(j.who));
+  strlcpy(j.text, deviceId, sizeof(j.text));
+  presBusy[slot] = true;
+  if (xQueueSend(q, &j, 0) != pdTRUE) {
+    presBusy[slot] = false;
+    return false;
+  }
+  return true;
+}
+
+static void presClear(int slot) {
+  memset(&PR[slot], 0, sizeof(Pres));
+  PR[slot].val = -1;
+  presGen[slot]++;
+}
+
+void presReset(int slot) {
+  if (slot < 0 || slot >= MAX_DEVICES) return;
+  if (!sMtx) return presClear(slot);  // Net::begin 전
+  SLock l;
+  presClear(slot);
+}
+
+Pres pres(int slot) {
+  SLock l;
+  return PR[slot];
+}
+
 void setAnyAway(bool v) { anyAway = v; }
 
 Status status() {
@@ -506,6 +630,7 @@ Status status() {
 
 void begin() {
   memset(&S, 0, sizeof(S));
+  for (int i = 0; i < MAX_DEVICES; i++) presClear(i);
   sMtx = xSemaphoreCreateMutex();
   q = xQueueCreate(8, sizeof(Job));
   // loop(웹 서버)와 같은 우선순위 → TLS 계산 중에도 번갈아 실행돼 웹이 멈추지 않음
