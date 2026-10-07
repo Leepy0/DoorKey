@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, release]   # release 브랜치 push = 배포
     tags: ["v*"]
-    paths-ignore: ["README.md", "android/**"]
+    # paths 필터는 두지 않는다: release 브랜치를 main과 같은 커밋으로 만들면 필터 때문에 실행되지 않음
   workflow_dispatch:
 
 env:
