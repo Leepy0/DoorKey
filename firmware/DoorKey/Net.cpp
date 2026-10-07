@@ -377,6 +377,9 @@ static void doPresence(const Job& j) {
       if (val == 0) {
         p.awaySeenMs = millis();
         p.awaySince = since;
+        if (p.awayRun < 255) p.awayRun++;
+      } else {
+        p.awayRun = 0;
       }
     }
   }
@@ -617,6 +620,12 @@ void presReset(int slot) {
   if (!sMtx) return presClear(slot);  // Net::begin 전
   SLock l;
   presClear(slot);
+}
+
+void presNewEpisode(int slot) {
+  if (slot < 0 || slot >= MAX_DEVICES || !sMtx) return;
+  SLock l;
+  PR[slot].awayRun = 0;
 }
 
 Pres pres(int slot) {

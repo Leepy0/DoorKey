@@ -36,6 +36,7 @@ void paramsToJson(JsonObject o) {
   o["activeTo"] = P.activeTo;
   o["keepWarm"] = P.keepWarm;
   o["notifyUnlock"] = P.notifyUnlock;
+  o["presFallback"] = P.presFallback;
 }
 
 // 범위 검사 후 반영. 없는 키는 유지
@@ -61,6 +62,7 @@ bool paramsFromJson(JsonObjectConst o, String& err) {
   takeBool(o, "requireNewAddr", n.requireNewAddr);
   takeBool(o, "keepWarm", n.keepWarm);
   takeBool(o, "notifyUnlock", n.notifyUnlock);
+  takeBool(o, "presFallback", n.presFallback);
   if (!takeInt(o, "arriveRssi", n.arriveRssi, -100, -30, err)) return false;
   if (!takeInt(o, "confirmCount", n.confirmCount, 1, 5, err)) return false;
   if (!takeInt(o, "exitRssi", n.exitRssi, -100, -30, err)) return false;

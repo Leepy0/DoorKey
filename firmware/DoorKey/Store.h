@@ -5,19 +5,20 @@
 
 // 판정 파라미터 (웹 UI > 설정)
 struct Params {
-  bool autoEnabled = true;       // 자동 개방 전체 스위치
+  bool autoEnabled = true;       // 자동 열기 전체 스위치
   int8_t arriveRssi = -85;       // 귀가 판정 최소 RSSI
   uint8_t confirmCount = 1;      // 귀가 판정에 필요한 감지 횟수 (5초 이내)
   int8_t exitRssi = -80;         // 외출 판정: 사라지기 직전 최대 RSSI가 이 값 이상이어야 "현관으로 나감"
   uint16_t exitWindowSec = 180;  // 위 최대 RSSI를 보는 구간 (마지막 감지 이전 N초, 최대 300)
   uint16_t absentSec = 90;       // 이 시간 동안 안 보이면 부재
-  uint16_t minAwaySec = 300;     // 최소 외출 시간 (짧은 외출은 자동 개방 안 함)
+  uint16_t minAwaySec = 300;     // 최소 외출 시간 (짧은 외출은 자동 열기 안 함)
   bool requireNewAddr = true;    // 재생 공격 방지: 귀가 시 외출 전과 다른 BLE 주소 요구
   uint16_t cooldownSec = 30;     // 문 열기 요청 간 최소 간격
-  uint8_t activeFrom = 0;        // 자동 개방 허용 시간대 (시, 0~23)
+  uint8_t activeFrom = 0;        // 자동 열기 허용 시간대 (시, 0~23)
   uint8_t activeTo = 24;         // (시, 1~24). 0~24 이면 항상
   bool keepWarm = true;          // 외출 중 SmartThings TLS 연결 미리 유지
   bool notifyUnlock = true;      // 문 열 때 ntfy 알림
+  bool presFallback = false;     // SmartThings 위치 조회가 안 될 때 BLE 이탈 신호만으로 외출 판단 (기본: 외출로 안 바꿈)
 };
 
 struct Device {

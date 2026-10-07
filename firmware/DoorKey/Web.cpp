@@ -146,6 +146,7 @@ static void hStatus() {
     o["addr"] = addr;
     o["event"] = r.lastEvent;
     o["presId"] = D[i].presId;
+    o["chk"] = Presence::chkName(Presence::check(i));  // 미감지 상태의 외출 확인 진행
     if (D[i].presId[0]) {
       Net::Pres p = Net::pres(i);
       JsonObject pr = o["pres"].to<JsonObject>();
@@ -155,7 +156,7 @@ static void hStatus() {
       pr["try"] = agoSec(p.tryMs);
       pr["code"] = p.code;
       pr["err"] = p.err;
-      pr["gate"] = Presence::gateName(Presence::gate(i));
+      pr["run"] = p.awayRun;
     }
     int8_t sp[60];
     Presence::spark(i, sp);
@@ -384,6 +385,10 @@ static void hPres() {
       Net::presReset(slot);
       Log::printf("[%s] 위치 기기 %s", Store::devices()[slot].name, id.length() ? "설정" : "해제");
     }
+  }
+  if (d["presFallback"].is<bool>()) {
+    Store::params().presFallback = d["presFallback"].as<bool>();
+    Store::saveParams();
   }
   Presence::presPollNow();
   ok("저장됨 — 위치를 조회합니다");
