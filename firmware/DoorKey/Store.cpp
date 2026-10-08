@@ -277,6 +277,15 @@ void setNtfyUrl(const String& u) {
   prefs.putString("ntfy", u);
 }
 
+String hbUrl() {
+  Lock l;
+  return prefs.getString("hb", "");
+}
+void setHbUrl(const String& u) {
+  Lock l;
+  prefs.putString("hb", u);
+}
+
 void exportJson(JsonDocument& doc) {
   JsonObject root = doc.to<JsonObject>();
   root["version"] = 1;
@@ -304,6 +313,7 @@ void exportJson(JsonDocument& doc) {
   st["command"] = c.command;
   st["args"] = c.args;
   root["ntfy"] = ntfyUrl();
+  root["hb"] = hbUrl();
 }
 
 bool importJson(JsonDocument& doc, String& err) {
@@ -354,6 +364,7 @@ bool importJson(JsonDocument& doc, String& err) {
     setSt(c);
   }
   if (root["ntfy"].is<const char*>()) setNtfyUrl(root["ntfy"].as<const char*>());
+  if (root["hb"].is<const char*>()) setHbUrl(root["hb"].as<const char*>());
   return true;
 }
 

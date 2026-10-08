@@ -187,6 +187,11 @@ static void hStatus() {
   ck["code"] = ns.checkCode;
   ck["ago"] = agoSec(ns.checkAtMs);
   ck["body"] = ns.checkBody;
+  JsonObject hb = st["hb"].to<JsonObject>();
+  hb["on"] = !Store::hbUrl().isEmpty();
+  hb["ago"] = agoSec(ns.hbAtMs);
+  hb["code"] = ns.hbCode;
+  hb["fails"] = ns.hbFails;
 
   Ota::Info oi = Ota::info();
   JsonObject u = d["upd"].to<JsonObject>();
@@ -237,6 +242,7 @@ static void hConfig() {
   st["command"] = c.command;
   st["args"] = c.args;
   d["ntfy"] = Store::ntfyUrl();
+  d["hb"] = Store::hbUrl();
   d["wifiSsid"] = Store::wifiSsid();
   sendJson(d);
 }
@@ -404,6 +410,17 @@ static void hNtfy() {
   ok("저장됨");
 }
 
+static void hHb() {
+  if (!auth()) return;
+  JsonDocument d;
+  if (!body(d)) return;
+  String u = d["url"] | "";
+  if (u.length() && !u.startsWith("http://") && !u.startsWith("https://")) return fail("http(s):// 로 시작해야 합니다");
+  Store::setHbUrl(u);
+  if (u.length()) Net::requestHeartbeat();
+  ok(u.length() ? "저장됨 — 지금 한 번 보냅니다" : "저장됨 — Heartbeat 끔");
+}
+
 static void hWifi() {
   if (!auth()) return;
   JsonDocument d;
@@ -526,6 +543,7 @@ void begin() {
     Net::requestTestNotify();
     ok("전송 요청");
   });
+  server.on("/api/hb", HTTP_POST, hHb);
   server.on("/api/wifi", HTTP_POST, hWifi);
   server.on("/api/admin", HTTP_POST, hAdmin);
   server.on("/api/import", HTTP_POST, hImport);

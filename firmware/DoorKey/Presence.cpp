@@ -213,7 +213,7 @@ static void handleReseen(int slot, Rt& r, const Ble::Det& d, const Params& P) {
   Chk c = check(slot);
   const char* why = c == Chk::Stale ? "SmartThings 위치를 조회하지 못해" : "SmartThings 위치가 '집'이라";
   setSt(slot, St::Home, "다시 감지 (%d dBm, %lu분 만에) — %s 열지 않음", d.rssi, (unsigned long)(awaySec / 60), why);
-  if (P.notifyUnlock) {
+  if (P.notifyUnlock) {  // 기본은 끔 — 로그에만 남는다
     char m[200];
     snprintf(m, sizeof(m), "%s 다시 감지 — %s 문을 열지 않았습니다. 외출이었다면 SmartThings 앱으로 여세요.", devName(slot), why);
     Net::notify(m);

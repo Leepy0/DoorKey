@@ -6,7 +6,7 @@
 // - 공장 초기화: 웹 UI > 시스템 > 설정 초기화
 // ============================================================================
 
-#define FW_VERSION "1.0.6"
+#define FW_VERSION "1.0.7"
 
 // ---- Wi-Fi (비워두면 설정용 AP로 부팅, ESP32는 2.4GHz만 접속 가능) ----
 #define DEFAULT_WIFI_SSID ""
@@ -49,6 +49,9 @@
 #define PRES_CONFIRM_N     2    // '외출'이 이 횟수만큼 연속으로 나와야 외출로 확정 (경계에서 튀는 값 거르기)
 #define PRES_STALE_SEC     180  // 미감지 시작 후 이 시간 넘게 조회 성공이 없으면 '조회 안 됨'
 #define PRES_EARLY_SEC     600  // SmartThings 외출 시각이 BLE 마지막 감지보다 이만큼 앞서도 이번 외출로 인정
+
+// ---- Heartbeat (healthchecks.io 등: 주기적으로 URL을 호출해 기기가 살아 있음을 알림) ----
+#define HB_INTERVAL_SEC 300  // 5분. healthchecks.io 체크의 Period를 5분, Grace를 5~10분으로
 
 // ---- 펌웨어 업데이트 (GitHub Releases, 서명 확인 후 웹 UI에서 설치) ----
 #define OTA_REPO         "Leepy0/DoorKey"

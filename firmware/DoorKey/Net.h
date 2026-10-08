@@ -28,6 +28,10 @@ struct Status {
   uint32_t checkAtMs;      // 마지막 연결 확인 시각
   int checkCode;
   char checkBody[160];
+  // Heartbeat
+  uint32_t hbAtMs;         // 마지막 전송 시각 (0 = 없음)
+  int hbCode;              // 마지막 HTTP 코드
+  uint32_t hbFails;        // 연속 실패 횟수
 };
 
 // SmartThings 폰 위치(presenceSensor) 조회 결과
@@ -51,6 +55,7 @@ void requestRefresh();
 void requestCheck();  // 대상 기기 상태 조회로 토큰·deviceId 확인
 void notify(const char* msg, const char* click = nullptr);  // click: 알림을 누르면 열 URL
 void requestTestNotify();
+void requestHeartbeat();  // 지금 바로 한 번 전송 (설정 저장·테스트용)
 void requestUpdCheck();    // 펌웨어 업데이트 확인
 void requestUpdInstall();  // 확인된 새 버전 설치 (1분 정도 다른 네트워크 작업 대기)
 

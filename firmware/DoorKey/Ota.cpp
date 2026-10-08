@@ -153,16 +153,7 @@ void check() {
 
   if (!newer) return;
   Log::printf("새 펌웨어 %s 있음 (현재 %s)", v.c_str(), FW_VERSION);
-  // 같은 버전은 한 번만 알림
-  Preferences p;
-  p.begin(NS, false);
-  if (p.getString("notified", "") != v) {
-    p.putString("notified", v);
-    char m[120];
-    snprintf(m, sizeof(m), "DoorKey 새 펌웨어 %s — 웹 UI › 시스템에서 설치", v.c_str());
-    Net::notify(m);
-  }
-  p.end();
+  // 알림은 보내지 않는다 (웹 UI 배너로만 표시). 설치는 사람이 고르는 일이라 급하지 않다
 }
 
 void periodic() {
@@ -345,10 +336,7 @@ void loop() {
     p.putBool("pend", false);
     p.end();
     I.verifying = false;
-    Log::printf("새 펌웨어 %s 정상 확인", FW_VERSION);
-    char m[80];
-    snprintf(m, sizeof(m), "DoorKey %s 업데이트 완료", FW_VERSION);
-    Net::notify(m);
+    Log::printf("새 펌웨어 %s 정상 확인", FW_VERSION);  // 정상이면 알림 없음 (되돌렸을 때만 알림)
   } else if (up >= VERIFY_TIMEOUT_MS) {
     rollback("Wi-Fi 연결 실패");
   }

@@ -11,7 +11,7 @@
 
 namespace Net {
 
-enum class JobType : uint8_t { Unlock, TestUnlock, Exchange, Refresh, Check, Notify, TestNotify, UpdCheck, UpdInstall, Presence };
+enum class JobType : uint8_t { Unlock, TestUnlock, Exchange, Refresh, Check, Notify, TestNotify, UpdCheck, UpdInstall, Presence, Heartbeat };
 
 struct Job {
   JobType type;
@@ -420,6 +420,48 @@ static void sendNotify(const char* msg, const char* click) {
   if (code < 200 || code >= 300) Log::printf("알림 전송 실패 (HTTP %d)", code);
 }
 
+// ---------------------------------------------------------------- Heartbeat
+
+static uint32_t nextHbMs = 0;
+
+// 설정된 URL을 GET. 응답이 2xx면 성공. 실패해도 로그는 첫 실패·복구 때만 남긴다
+static void sendHeartbeat() {
+  String url = Store::hbUrl();
+  if (url.isEmpty()) return;
+  HTTPClient http;
+  http.setConnectTimeout(5000);
+  http.setTimeout(6000);
+  NetworkClientSecure sc;
+  NetworkClient plain;
+  bool began;
+  if (url.startsWith("https://")) {
+    sc.setInsecure();
+    began = http.begin(sc, url);
+  } else {
+    began = http.begin(plain, url);
+  }
+  int code = began ? http.GET() : -100;
+  http.end();
+  bool ok = code >= 200 && code < 300;
+  uint32_t fails;
+  {
+    SLock l;
+    S.hbAtMs = millis();
+    S.hbCode = code;
+    fails = ok ? 0 : S.hbFails + 1;
+    bool wasFailing = S.hbFails > 0;
+    S.hbFails = fails;
+    if (!ok && fails == 1) Log::printf("Heartbeat 전송 실패 (HTTP %d)", code);
+    if (ok && wasFailing) Log::printf("Heartbeat 전송 복구");
+  }
+}
+
+static void heartbeatLoop() {
+  if ((int32_t)(millis() - nextHbMs) < 0) return;
+  nextHbMs = millis() + HB_INTERVAL_SEC * 1000UL;
+  sendHeartbeat();
+}
+
 // ---------------------------------------------------------------- 주기 작업
 
 static void refreshLoop() {
@@ -494,6 +536,10 @@ static void handle(const Job& j) {
       Ota::install();
       break;
     case JobType::Presence: doPresence(j); break;
+    case JobType::Heartbeat:
+      sendHeartbeat();
+      nextHbMs = millis() + HB_INTERVAL_SEC * 1000UL;
+      break;
   }
 }
 
@@ -521,6 +567,7 @@ static void task(void*) {
     if (WiFi.isConnected()) {
       refreshLoop();
       warmLoop();
+      heartbeatLoop();
       Ota::periodic();
     }
   }
@@ -573,6 +620,12 @@ void notify(const char* msg, const char* click) {
 void requestTestNotify() {
   Job j = {};
   j.type = JobType::TestNotify;
+  push(j);
+}
+
+void requestHeartbeat() {
+  Job j = {};
+  j.type = JobType::Heartbeat;
   push(j);
 }
 
