@@ -339,7 +339,7 @@ function renderSys(){$("sysInfo").innerHTML=[["IP",S.ip],["Wi-Fi",S.ssid+(S.rssi
  const u=S.upd||{},UST={idle:"확인 전",checking:"확인 중…",available:"새 버전 있음",latest:"최신 버전입니다",downloading:`받는 중 ${u.progress}%`,error:"오류"};
  $("updBox").innerHTML=[["현재 버전",S.fw],["최신 릴리스",u.latest||"—"],["마지막 확인",u.checkedAgo<0?"—":ago(u.checkedAgo)],["상태",(UST[u.st]||u.st)+(u.st=="error"&&u.err?" — "+u.err:"")],...(u.notes&&u.st=="available"?[["변경 내용",u.notes]]:[])].map(([k,v])=>`<div>${k}</div><div>${esc(v)}</div>`).join("");
  const h=S.st.hb||{};$("hbState").textContent=!h.on?"꺼짐":h.ago<0?"아직 보내지 않음":`마지막 전송 ${ago(h.ago)} · `+(h.code>=200&&h.code<300?"성공":`실패 (HTTP ${h.code}, 연속 ${h.fails}회)`);
- const cm=S.st.cmd||{};$("cmdState").textContent=!cm.on?"꺼짐":cm.ago<0?"아직 확인하지 않음":`마지막 확인 ${ago(cm.ago)}`+(cm.code==200?"":` (HTTP ${cm.code})`)+(cm.last?` · 마지막 명령: ${cm.last}`:"");
+ const cm=S.st.ntfyCmd||{};$("cmdState").textContent=!cm.on?"꺼짐":cm.ago<0?"아직 확인하지 않음":`마지막 확인 ${ago(cm.ago)}`+(cm.code==200?"":` (HTTP ${cm.code})`)+(cm.last?` · 마지막 명령: ${cm.last}`:"");
  const ub=$("updBtn");ub.classList.toggle("hide",u.st!="available");if(u.st=="available"&&!ub.classList.contains("busy"))ub.textContent=`v${u.latest} 설치`}
 
 const PF=[["귀가 — 외출 중인 폰이 현관에 왔는가"],

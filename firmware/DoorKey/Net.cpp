@@ -467,8 +467,8 @@ static uint32_t nextCmdMs = 0;
 
 static void setCmdLast(const char* s) {
   SLock l;
-  strlcpy(S.cmdLast, s, sizeof(S.cmdLast));
-  Log::utf8Fix(S.cmdLast);
+  strlcpy(S.ntfyLast, s, sizeof(S.ntfyLast));
+  Log::utf8Fix(S.ntfyLast);
 }
 
 // 명령 한 건 실행. 문 열기는 일부러 받지 않는다 (토픽 이름만 알면 누구나 보낼 수 있으므로)
@@ -550,8 +550,8 @@ static void pollCmd() {
   http.end();
   {
     SLock l;
-    S.cmdAtMs = millis();
-    S.cmdCode = code;
+    S.ntfyAtMs = millis();
+    S.ntfyCode = code;
   }
   if (code != 200) return;
 

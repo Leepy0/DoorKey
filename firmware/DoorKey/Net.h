@@ -33,9 +33,9 @@ struct Status {
   int hbCode;              // 마지막 HTTP 코드
   uint32_t hbFails;        // 연속 실패 횟수
   // ntfy 명령
-  uint32_t cmdAtMs;        // 마지막 확인 시각 (0 = 없음)
-  int cmdCode;             // 마지막 HTTP 코드
-  char cmdLast[64];        // 마지막으로 처리한 명령과 결과
+  uint32_t ntfyAtMs;       // 마지막 확인 시각 (0 = 없음)
+  int ntfyCode;            // 마지막 HTTP 코드
+  char ntfyLast[64];       // 마지막으로 처리한 명령과 결과
 };
 
 // SmartThings 폰 위치(presenceSensor) 조회 결과

@@ -192,11 +192,11 @@ static void hStatus() {
   hb["ago"] = agoSec(ns.hbAtMs);
   hb["code"] = ns.hbCode;
   hb["fails"] = ns.hbFails;
-  JsonObject cm = st["cmd"].to<JsonObject>();
+  JsonObject cm = st["ntfyCmd"].to<JsonObject>();  // "cmd"는 마지막 문 열기 명령이 쓴다
   cm["on"] = !Store::cmdUrl().isEmpty();
-  cm["ago"] = agoSec(ns.cmdAtMs);
-  cm["code"] = ns.cmdCode;
-  cm["last"] = ns.cmdLast;
+  cm["ago"] = agoSec(ns.ntfyAtMs);
+  cm["code"] = ns.ntfyCode;
+  cm["last"] = ns.ntfyLast;
 
   Ota::Info oi = Ota::info();
   JsonObject u = d["upd"].to<JsonObject>();
