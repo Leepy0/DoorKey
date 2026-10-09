@@ -531,7 +531,9 @@ static void pollCmd() {
   if (url.isEmpty()) return;
   String since = Store::cmdSince();
   if (url.endsWith("/")) url.remove(url.length() - 1);
-  url += "/json?poll=1&since=" + (since.isEmpty() ? String("30s") : since);  // 처음엔 최근 30초치만
+  // 처음(ID 없음)엔 최근 10분치. 확인 주기(2분)보다 넉넉해야 그 사이에 온 메시지를 놓치지 않는다.
+  // 한 번 처리하면 그 ID부터 읽으므로 같은 명령이 두 번 실행되지는 않는다
+  url += "/json?poll=1&since=" + (since.isEmpty() ? String("10m") : since);
 
   HTTPClient http;
   http.setConnectTimeout(5000);
@@ -573,7 +575,10 @@ static void pollCmd() {
     lastId = doc["id"] | "";
     pending = doc["message"] | "";  // 여러 개가 쌓였으면 마지막 것만 실행
   }
-  if (lastId.isEmpty()) return;
+  if (lastId.isEmpty()) {
+    setCmdLast("새 메시지 없음");
+    return;
+  }
   Store::setCmdSince(lastId);  // 실행 전에 저장: 재부팅 명령이 반복되지 않도록
   runCmd(pending);
 }
