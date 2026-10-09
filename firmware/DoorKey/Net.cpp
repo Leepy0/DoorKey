@@ -284,10 +284,9 @@ static void doUnlock(const Job& j) {
               j.who, code, (unsigned long)httpMs, (unsigned long)totalMs);
   if (!ok) Log::printf("응답: %.100s", resp.c_str());
 
-  if (j.type == JobType::Unlock && (!ok || Store::params().notifyUnlock)) {
+  if (j.type == JobType::Unlock && !ok) {  // 실패만 알림. 열림은 로그에만
     char m[160];
-    if (ok) snprintf(m, sizeof(m), "%s 귀가 — 문 열림", j.who);
-    else snprintf(m, sizeof(m), "%s 귀가 감지 — 문 열기 실패 (HTTP %d)", j.who, code);
+    snprintf(m, sizeof(m), "%s 귀가 감지 — 문 열기 실패 (HTTP %d)", j.who, code);
     sendNotify(m);
   }
 }
@@ -568,7 +567,7 @@ static void task(void*) {
       refreshLoop();
       warmLoop();
       heartbeatLoop();
-      Ota::periodic();
+      if (!anyAway) Ota::periodic();  // 외출 중엔 업데이트 확인을 미룬다 (귀가 순간 문 열기와 겹치지 않게)
     }
   }
 }

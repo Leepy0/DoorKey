@@ -191,7 +191,7 @@ dialog p{margin:0 0 16px}
    <input type="file" id="impFile" accept=".json" style="flex:1"><button class="b" onclick="doImport(this)">가져오기</button></div></div>
   <div class="card"><h2>펌웨어 업데이트</h2><div id="updBox" class="kv"></div>
    <div class="row mt"><button class="b" onclick="post('/api/upd/check',{},this)">지금 확인</button><button class="b p hide" id="updBtn" onclick="doUpd(this)">설치</button></div>
-   <div class="help">12시간마다 새 버전을 확인하고 있으면 알림을 보냅니다. 서명이 맞는 펌웨어만 설치하며, 새 버전이 제대로 동작하지 않으면 이전 버전으로 되돌립니다.</div>
+   <div class="help">1시간마다 새 버전을 확인합니다 (외출 중인 사람이 있을 때는 건너뜀). 새 버전이 있으면 여기와 화면 위에 표시됩니다. 서명이 맞는 펌웨어만 설치하며, 새 버전이 제대로 동작하지 않으면 이전 버전으로 되돌립니다.</div>
    <details class="mt"><summary class="mute">파일로 직접 올리기</summary>
     <div class="help">릴리스의 DoorKey.bin 또는 Actions 빌드의 _ota.bin (_full.bin은 USB 전용)</div>
     <div class="row mt"><input type="file" id="fwFile" accept=".bin" style="flex:1"><button class="b" onclick="doOta(this)">업로드</button></div>
@@ -350,8 +350,7 @@ const PF=[["귀가 — 외출 중인 폰이 현관에 왔는가"],
  ["activeFrom","허용 시작 (시)","0~23"],["activeTo","허용 종료 (시)","1~24. 0~24면 항상 허용"],
  ["requireNewAddr","재생 공격 방지","외출 전에 보던 블루투스 주소가 다시 나타나면 열지 않습니다. 폰 주소는 약 15분마다 바뀌므로 그보다 짧은 외출은 안 열릴 수 있습니다.","b"],
  ["기타"],
- ["keepWarm","연결 미리 유지","외출 중인 사람이 있으면 SmartThings 연결을 열어 둬 문이 더 빨리 열립니다.","b"],
- ["notifyUnlock","문 열기 알림","문을 열었을 때와 열지 않은 이유가 있을 때도 알림을 보냅니다. 평소엔 꺼 두세요. 실패·인증 만료 같은 중요한 알림은 이 설정과 상관없이 보냅니다.","b"]];
+ ["keepWarm","연결 미리 유지","외출 중인 사람이 있으면 SmartThings 연결을 열어 둬 문이 더 빨리 열립니다.","b"]];
 function renderParams(){$("pForm").innerHTML=PF.map(([k,t,h,ty])=>t===undefined?`<h3>${k}</h3>`:ty=="b"?`<div><label class="ck"><input type="checkbox" id="p_${k}" ${CFG.params[k]?"checked":""}> ${t}</label><div class="help">${h}</div></div>`
  :`<div><label>${t}</label><input id="p_${k}" type="number" inputmode="numeric" value="${CFG.params[k]}"><div class="help">${h}</div></div>`).join("");
  $("p_presFallback").checked=!!CFG.params.presFallback}

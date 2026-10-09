@@ -35,7 +35,6 @@ void paramsToJson(JsonObject o) {
   o["activeFrom"] = P.activeFrom;
   o["activeTo"] = P.activeTo;
   o["keepWarm"] = P.keepWarm;
-  o["notifyUnlock"] = P.notifyUnlock;
   o["presFallback"] = P.presFallback;
 }
 
@@ -61,7 +60,6 @@ bool paramsFromJson(JsonObjectConst o, String& err) {
   takeBool(o, "autoEnabled", n.autoEnabled);
   takeBool(o, "requireNewAddr", n.requireNewAddr);
   takeBool(o, "keepWarm", n.keepWarm);
-  takeBool(o, "notifyUnlock", n.notifyUnlock);
   takeBool(o, "presFallback", n.presFallback);
   if (!takeInt(o, "arriveRssi", n.arriveRssi, -100, -30, err)) return false;
   if (!takeInt(o, "confirmCount", n.confirmCount, 1, 5, err)) return false;

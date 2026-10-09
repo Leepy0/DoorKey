@@ -17,7 +17,6 @@ struct Params {
   uint8_t activeFrom = 0;        // 자동 열기 허용 시간대 (시, 0~23)
   uint8_t activeTo = 24;         // (시, 1~24). 0~24 이면 항상
   bool keepWarm = true;          // 외출 중 SmartThings TLS 연결 미리 유지
-  bool notifyUnlock = false;     // 문 열림·열지 않은 이유 알림 (평소엔 끔. 실패·인증 만료·조회 불가 등 치명적인 알림은 항상 보냄)
   bool presFallback = false;     // SmartThings 위치 조회가 안 될 때 BLE 이탈 신호만으로 외출 판단 (기본: 외출로 안 바꿈)
 };
 

@@ -6,7 +6,7 @@
 // - 공장 초기화: 웹 UI > 시스템 > 설정 초기화
 // ============================================================================
 
-#define FW_VERSION "1.0.7"
+#define FW_VERSION "1.0.8"
 
 // ---- Wi-Fi (비워두면 설정용 AP로 부팅, ESP32는 2.4GHz만 접속 가능) ----
 #define DEFAULT_WIFI_SSID ""
@@ -57,4 +57,4 @@
 #define OTA_REPO         "Leepy0/DoorKey"
 #define OTA_MANIFEST_URL "https://github.com/" OTA_REPO "/releases/latest/download/manifest.json"
 #define OTA_SIG_URL      "https://github.com/" OTA_REPO "/releases/latest/download/manifest.sig"
-#define OTA_CHECK_HOURS  12
+#define OTA_CHECK_HOURS  1   // 확인은 작은 파일 하나 받는 것이라 가볍다. 외출 중인 사람이 있으면 건너뛴다 (귀가 순간 네트워크 작업이 겹치지 않게)
