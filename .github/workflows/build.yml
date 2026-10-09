@@ -92,14 +92,16 @@ jobs:
           mkdir -p rel
           cp out/DoorKey.ino.bin rel/DoorKey.bin
           cp dist/boot_app0.bin rel/boot_app0.bin
-          NOTES=$(git log -1 --format=%s | cut -c1-120)
+          # 릴리스 메모 = 커밋 제목. 자르기는 python에서 글자 단위로 (cut -c는 바이트 단위라 한글이 깨짐)
+          NOTES=$(git log -1 --format=%s)
           python3 - "$V" "$TAG" "$GITHUB_REPOSITORY" "$NOTES" <<'EOF'
           import hashlib, json, sys
           v, tag, repo, notes = sys.argv[1:5]
+          notes = notes[:100]
           b = open("rel/DoorKey.bin", "rb").read()
           m = {"version": v, "size": len(b), "sha256": hashlib.sha256(b).hexdigest(),
                "bin": f"https://github.com/{repo}/releases/download/{tag}/DoorKey.bin", "notes": notes}
-          open("rel/manifest.json", "w").write(json.dumps(m, ensure_ascii=False, separators=(",", ":")))
+          open("rel/manifest.json", "w", encoding="utf-8").write(json.dumps(m, ensure_ascii=False, separators=(",", ":")))
           EOF
 
           # 서명 후, 펌웨어에 내장된 공개키로 다시 검증 (키가 어긋나면 릴리스 중단)
