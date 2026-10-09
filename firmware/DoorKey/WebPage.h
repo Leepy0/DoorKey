@@ -179,6 +179,11 @@ dialog p{margin:0 0 16px}
    <div class="help">5분마다 이 주소를 호출합니다. healthchecks.io에서 체크를 만들고(Period 5분, Grace 10분) Ping URL을 넣으면, DoorKey가 꺼지거나 Wi-Fi가 끊겼을 때 healthchecks.io가 알려 줍니다. 비우면 끕니다.</div>
    <div id="hbState" class="mute small mt"></div>
    <div class="row mt"><button class="b p" onclick="saveHb(this)">저장</button></div></div>
+  <div class="card"><h2>ntfy로 명령 받기</h2>
+   <label>명령 토픽 URL</label><input id="cmd" class="mono" placeholder="https://ntfy.sh/내-비밀-명령-토픽">
+   <div class="help">이 토픽에 <b>update</b>(새 버전 설치), <b>check</b>(확인만), <b>status</b>, <b>reboot</b>를 보내면 2분 안에 실행하고 결과를 알림 토픽으로 답합니다. 알림 토픽과 다른, 추측하기 어려운 이름을 쓰세요. 토픽을 아는 사람은 누구나 보낼 수 있으므로 문 열기 명령은 없습니다.</div>
+   <div id="cmdState" class="mute small mt"></div>
+   <div class="row mt"><button class="b p" onclick="saveCmd(this)">저장</button></div></div>
   <div class="card"><h2>Wi-Fi</h2>
    <div class="grid"><div><label>SSID (2.4GHz)</label><input id="wSsid"></div><div><label>비밀번호</label><input id="wPass" type="password"></div></div>
    <div class="row mt"><button class="b p" onclick="saveWifi(this)">저장 후 재부팅</button></div></div>
@@ -334,6 +339,7 @@ function renderSys(){$("sysInfo").innerHTML=[["IP",S.ip],["Wi-Fi",S.ssid+(S.rssi
  const u=S.upd||{},UST={idle:"확인 전",checking:"확인 중…",available:"새 버전 있음",latest:"최신 버전입니다",downloading:`받는 중 ${u.progress}%`,error:"오류"};
  $("updBox").innerHTML=[["현재 버전",S.fw],["최신 릴리스",u.latest||"—"],["마지막 확인",u.checkedAgo<0?"—":ago(u.checkedAgo)],["상태",(UST[u.st]||u.st)+(u.st=="error"&&u.err?" — "+u.err:"")],...(u.notes&&u.st=="available"?[["변경 내용",u.notes]]:[])].map(([k,v])=>`<div>${k}</div><div>${esc(v)}</div>`).join("");
  const h=S.st.hb||{};$("hbState").textContent=!h.on?"꺼짐":h.ago<0?"아직 보내지 않음":`마지막 전송 ${ago(h.ago)} · `+(h.code>=200&&h.code<300?"성공":`실패 (HTTP ${h.code}, 연속 ${h.fails}회)`);
+ const cm=S.st.cmd||{};$("cmdState").textContent=!cm.on?"꺼짐":cm.ago<0?"아직 확인하지 않음":`마지막 확인 ${ago(cm.ago)}`+(cm.code==200?"":` (HTTP ${cm.code})`)+(cm.last?` · 마지막 명령: ${cm.last}`:"");
  const ub=$("updBtn");ub.classList.toggle("hide",u.st!="available");if(u.st=="available"&&!ub.classList.contains("busy"))ub.textContent=`v${u.latest} 설치`}
 
 const PF=[["귀가 — 외출 중인 폰이 현관에 왔는가"],
@@ -355,7 +361,7 @@ function renderParams(){$("pForm").innerHTML=PF.map(([k,t,h,ty])=>t===undefined?
  :`<div><label>${t}</label><input id="p_${k}" type="number" inputmode="numeric" value="${CFG.params[k]}"><div class="help">${h}</div></div>`).join("");
  $("p_presFallback").checked=!!CFG.params.presFallback}
 async function loadCfg(){try{CFG=await api("/api/config");renderParams();const s=CFG.st;$("sCid").value=s.clientId;$("sCsec").value="";$("sCsec").placeholder=s.hasSecret?"(저장됨 — 바꿀 때만 입력)":"";$("sRedir").value=s.redirect;
- $("sDev").value=s.deviceId;$("sComp").value=s.component;$("sCap").value=s.capability;$("sCmd").value=s.command;$("sArgs").value=s.args;$("ntfy").value=CFG.ntfy;$("hb").value=CFG.hb||"";$("wSsid").value=CFG.wifiSsid;authLink()}catch(e){toast("설정 읽기 실패 — "+errText(e))}}
+ $("sDev").value=s.deviceId;$("sComp").value=s.component;$("sCap").value=s.capability;$("sCmd").value=s.command;$("sArgs").value=s.args;$("ntfy").value=CFG.ntfy;$("hb").value=CFG.hb||"";$("cmd").value=CFG.cmd||"";$("wSsid").value=CFG.wifiSsid;authLink()}catch(e){toast("설정 읽기 실패 — "+errText(e))}}
 function authLink(){const cid=$("sCid").value.trim(),r=$("sRedir").value.trim();$("authLink").href=`https://api.smartthings.com/oauth/authorize?client_id=${encodeURIComponent(cid)}&response_type=code&redirect_uri=${encodeURIComponent(r)}&scope=${encodeURIComponent("r:devices:* x:devices:*")}`}
 ["sCid","sRedir"].forEach(i=>$(i).addEventListener("input",authLink));
 function saveParams(btn){const o={};PF.forEach(([k,t,,ty])=>{if(t===undefined)return;const e=$("p_"+k);o[k]=ty=="b"?e.checked:parseInt(e.value,10)});post("/api/params",o,btn)}
@@ -369,6 +375,7 @@ async function delDev(s,btn){const d=S.devices.find(x=>x.slot==s),n=d?d.name:"�
 function addManual(btn){post("/api/device/add",{name:$("mName").value.trim(),irk:$("mIrk").value.trim()},btn)}
 function saveNtfy(btn){post("/api/ntfy",{url:$("ntfy").value.trim()},btn)}
 function saveHb(btn){post("/api/hb",{url:$("hb").value.trim()},btn)}
+function saveCmd(btn){post("/api/cmd",{url:$("cmd").value.trim()},btn)}
 async function saveWifi(btn){if(await ask({title:"Wi-Fi 변경",msg:"저장 후 재부팅합니다. SSID나 비밀번호가 틀리면 DoorKey-Setup AP에 접속해 다시 설정해야 합니다.",ok:"저장 후 재부팅",danger:false}))post("/api/wifi",{ssid:$("wSsid").value,pass:$("wPass").value},btn)}
 function saveAdmin(btn){const p=$("aPass").value;if(p.length<6)return toast("비밀번호는 6자 이상이어야 합니다");post("/api/admin",{pass:p},btn).then(j=>{if(j){$("aPass").value="";toast("변경됨 — 새 비밀번호로 다시 로그인")}})}
 async function doImport(btn){const f=$("impFile").files[0];if(!f)return toast("백업 파일(.json)을 먼저 고르세요");let o;try{o=JSON.parse(await f.text())}catch(e){return toast("백업 파일 형식이 아닙니다 (JSON 오류)")}

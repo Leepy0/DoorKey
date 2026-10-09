@@ -11,7 +11,7 @@
 
 namespace Net {
 
-enum class JobType : uint8_t { Unlock, TestUnlock, Exchange, Refresh, Check, Notify, TestNotify, UpdCheck, UpdInstall, Presence, Heartbeat };
+enum class JobType : uint8_t { Unlock, TestUnlock, Exchange, Refresh, Check, Notify, TestNotify, UpdCheck, UpdInstall, Presence, Heartbeat, CmdPoll };
 
 struct Job {
   JobType type;
@@ -461,6 +461,129 @@ static void heartbeatLoop() {
   sendHeartbeat();
 }
 
+// ---------------------------------------------------------------- ntfy 명령 토픽
+
+static uint32_t nextCmdMs = 0;
+
+static void setCmdLast(const char* s) {
+  SLock l;
+  strlcpy(S.cmdLast, s, sizeof(S.cmdLast));
+  Log::utf8Fix(S.cmdLast);
+}
+
+// 명령 한 건 실행. 문 열기는 일부러 받지 않는다 (토픽 이름만 알면 누구나 보낼 수 있으므로)
+static void runCmd(const String& msg) {
+  String c = msg;
+  c.trim();
+  c.toLowerCase();
+  Log::printf("ntfy 명령: %s", c.c_str());
+  if (c == "update") {
+    Ota::check();
+    Ota::Info i = Ota::info();
+    if (i.st == Ota::St::Available) {
+      char m[120];
+      snprintf(m, sizeof(m), "DoorKey v%s 설치 시작 (현재 %s) — 끝나면 재부팅", i.latest, FW_VERSION);
+      sendNotify(m);
+      setCmdLast("update → 설치 중");
+      api->stop();
+      Ota::install();  // 성공하면 재부팅하므로 아래로 내려오면 실패
+      i = Ota::info();
+      snprintf(m, sizeof(m), "DoorKey 설치 실패: %s", i.err);
+      sendNotify(m);
+      setCmdLast("update → 설치 실패");
+    } else if (i.st == Ota::St::Latest) {
+      sendNotify("DoorKey " FW_VERSION " — 이미 최신 버전");
+      setCmdLast("update → 최신");
+    } else {
+      char m[140];
+      snprintf(m, sizeof(m), "DoorKey 업데이트 확인 실패: %s", i.err);
+      sendNotify(m);
+      setCmdLast("update → 확인 실패");
+    }
+  } else if (c == "check") {
+    Ota::check();
+    Ota::Info i = Ota::info();
+    char m[140];
+    if (i.st == Ota::St::Available) snprintf(m, sizeof(m), "DoorKey 새 버전 v%s 있음 (현재 %s) — 'update'를 보내면 설치", i.latest, FW_VERSION);
+    else if (i.st == Ota::St::Latest) snprintf(m, sizeof(m), "DoorKey %s — 최신 버전", FW_VERSION);
+    else snprintf(m, sizeof(m), "DoorKey 업데이트 확인 실패: %s", i.err);
+    sendNotify(m);
+    setCmdLast("check");
+  } else if (c == "reboot") {
+    sendNotify("DoorKey 재부팅");
+    setCmdLast("reboot");
+    delay(500);
+    ESP.restart();
+  } else if (c == "status") {
+    char m[160];
+    snprintf(m, sizeof(m), "DoorKey %s · http://%s · Wi-Fi %d dBm · 가동 %lu분", FW_VERSION, WiFi.localIP().toString().c_str(),
+             WiFi.RSSI(), (unsigned long)(millis() / 60000));
+    sendNotify(m);
+    setCmdLast("status");
+  } else {
+    setCmdLast(("모르는 명령: " + c).c_str());
+  }
+}
+
+// 토픽의 새 메시지를 가져온다 (poll=1: 쌓인 것만 받고 바로 끊음). 한 번에 여러 줄(JSON Lines)이 올 수 있다
+static void pollCmd() {
+  String url = Store::cmdUrl();
+  if (url.isEmpty()) return;
+  String since = Store::cmdSince();
+  if (url.endsWith("/")) url.remove(url.length() - 1);
+  url += "/json?poll=1&since=" + (since.isEmpty() ? String("30s") : since);  // 처음엔 최근 30초치만
+
+  HTTPClient http;
+  http.setConnectTimeout(5000);
+  http.setTimeout(8000);
+  NetworkClientSecure sc;
+  NetworkClient plain;
+  bool began;
+  if (url.startsWith("https://")) {
+    sc.setInsecure();
+    began = http.begin(sc, url);
+  } else {
+    began = http.begin(plain, url);
+  }
+  int code = began ? http.GET() : -100;
+  String body = code == 200 ? http.getString() : String();
+  http.end();
+  {
+    SLock l;
+    S.cmdAtMs = millis();
+    S.cmdCode = code;
+  }
+  if (code != 200) return;
+
+  // 줄마다 {"id":..,"event":"message","message":".."}
+  int pos = 0;
+  String lastId;
+  String pending;
+  while (pos < (int)body.length()) {
+    int nl = body.indexOf('\n', pos);
+    if (nl < 0) nl = body.length();
+    String line = body.substring(pos, nl);
+    pos = nl + 1;
+    line.trim();
+    if (line.isEmpty()) continue;
+    JsonDocument doc;
+    if (deserializeJson(doc, line)) continue;
+    const char* ev = doc["event"] | "";
+    if (strcmp(ev, "message") != 0) continue;
+    lastId = doc["id"] | "";
+    pending = doc["message"] | "";  // 여러 개가 쌓였으면 마지막 것만 실행
+  }
+  if (lastId.isEmpty()) return;
+  Store::setCmdSince(lastId);  // 실행 전에 저장: 재부팅 명령이 반복되지 않도록
+  runCmd(pending);
+}
+
+static void cmdLoop() {
+  if ((int32_t)(millis() - nextCmdMs) < 0) return;
+  nextCmdMs = millis() + CMD_POLL_SEC * 1000UL;
+  pollCmd();
+}
+
 // ---------------------------------------------------------------- 주기 작업
 
 static void refreshLoop() {
@@ -539,6 +662,10 @@ static void handle(const Job& j) {
       sendHeartbeat();
       nextHbMs = millis() + HB_INTERVAL_SEC * 1000UL;
       break;
+    case JobType::CmdPoll:
+      pollCmd();
+      nextCmdMs = millis() + CMD_POLL_SEC * 1000UL;
+      break;
   }
 }
 
@@ -567,6 +694,7 @@ static void task(void*) {
       refreshLoop();
       warmLoop();
       heartbeatLoop();
+      cmdLoop();
       if (!anyAway) Ota::periodic();  // 외출 중엔 업데이트 확인을 미룬다 (귀가 순간 문 열기와 겹치지 않게)
     }
   }
@@ -625,6 +753,12 @@ void requestTestNotify() {
 void requestHeartbeat() {
   Job j = {};
   j.type = JobType::Heartbeat;
+  push(j);
+}
+
+void requestCmdPoll() {
+  Job j = {};
+  j.type = JobType::CmdPoll;
   push(j);
 }
 

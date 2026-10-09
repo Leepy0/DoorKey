@@ -284,6 +284,24 @@ void setHbUrl(const String& u) {
   prefs.putString("hb", u);
 }
 
+String cmdUrl() {
+  Lock l;
+  return prefs.getString("cmd", "");
+}
+void setCmdUrl(const String& u) {
+  Lock l;
+  prefs.putString("cmd", u);
+  prefs.remove("cmd_since");  // 토픽이 바뀌면 처음부터
+}
+String cmdSince() {
+  Lock l;
+  return prefs.getString("cmd_since", "");
+}
+void setCmdSince(const String& id) {
+  Lock l;
+  prefs.putString("cmd_since", id);
+}
+
 void exportJson(JsonDocument& doc) {
   JsonObject root = doc.to<JsonObject>();
   root["version"] = 1;
@@ -312,6 +330,7 @@ void exportJson(JsonDocument& doc) {
   st["args"] = c.args;
   root["ntfy"] = ntfyUrl();
   root["hb"] = hbUrl();
+  root["cmd"] = cmdUrl();
 }
 
 bool importJson(JsonDocument& doc, String& err) {
@@ -363,6 +382,7 @@ bool importJson(JsonDocument& doc, String& err) {
   }
   if (root["ntfy"].is<const char*>()) setNtfyUrl(root["ntfy"].as<const char*>());
   if (root["hb"].is<const char*>()) setHbUrl(root["hb"].as<const char*>());
+  if (root["cmd"].is<const char*>()) setCmdUrl(root["cmd"].as<const char*>());
   return true;
 }
 

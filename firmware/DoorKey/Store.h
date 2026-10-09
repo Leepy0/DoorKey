@@ -76,6 +76,11 @@ void setNtfyUrl(const String& u);
 String hbUrl();  // Heartbeat URL (비우면 끔)
 void setHbUrl(const String& u);
 
+String cmdUrl();  // ntfy 명령 토픽 URL (비우면 끔)
+void setCmdUrl(const String& u);
+String cmdSince();  // 마지막으로 처리한 메시지 ID
+void setCmdSince(const String& id);
+
 // 백업/복원 (토큰 제외)
 void exportJson(JsonDocument& doc);
 bool importJson(JsonDocument& doc, String& err);

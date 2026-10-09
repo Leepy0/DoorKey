@@ -192,6 +192,11 @@ static void hStatus() {
   hb["ago"] = agoSec(ns.hbAtMs);
   hb["code"] = ns.hbCode;
   hb["fails"] = ns.hbFails;
+  JsonObject cm = st["cmd"].to<JsonObject>();
+  cm["on"] = !Store::cmdUrl().isEmpty();
+  cm["ago"] = agoSec(ns.cmdAtMs);
+  cm["code"] = ns.cmdCode;
+  cm["last"] = ns.cmdLast;
 
   Ota::Info oi = Ota::info();
   JsonObject u = d["upd"].to<JsonObject>();
@@ -243,6 +248,7 @@ static void hConfig() {
   st["args"] = c.args;
   d["ntfy"] = Store::ntfyUrl();
   d["hb"] = Store::hbUrl();
+  d["cmd"] = Store::cmdUrl();
   d["wifiSsid"] = Store::wifiSsid();
   sendJson(d);
 }
@@ -421,6 +427,19 @@ static void hHb() {
   ok(u.length() ? "저장됨 — 지금 한 번 보냅니다" : "저장됨 — Heartbeat 끔");
 }
 
+static void hCmd() {
+  if (!auth()) return;
+  JsonDocument d;
+  if (!body(d)) return;
+  String u = d["url"] | "";
+  u.trim();
+  if (u.length() && !u.startsWith("http://") && !u.startsWith("https://")) return fail("http(s):// 로 시작해야 합니다");
+  if (u.length() && u == Store::ntfyUrl()) return fail("알림 토픽과 같으면 안 됩니다 — 알림 메시지를 명령으로 읽게 됩니다");
+  Store::setCmdUrl(u);
+  if (u.length()) Net::requestCmdPoll();
+  ok(u.length() ? "저장됨 — 2분마다 확인합니다" : "저장됨 — 명령 수신 끔");
+}
+
 static void hWifi() {
   if (!auth()) return;
   JsonDocument d;
@@ -544,6 +563,7 @@ void begin() {
     ok("전송 요청");
   });
   server.on("/api/hb", HTTP_POST, hHb);
+  server.on("/api/cmd", HTTP_POST, hCmd);
   server.on("/api/wifi", HTTP_POST, hWifi);
   server.on("/api/admin", HTTP_POST, hAdmin);
   server.on("/api/import", HTTP_POST, hImport);

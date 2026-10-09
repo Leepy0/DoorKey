@@ -6,7 +6,7 @@
 // - 공장 초기화: 웹 UI > 시스템 > 설정 초기화
 // ============================================================================
 
-#define FW_VERSION "1.0.8"
+#define FW_VERSION "1.0.9"
 
 // ---- Wi-Fi (비워두면 설정용 AP로 부팅, ESP32는 2.4GHz만 접속 가능) ----
 #define DEFAULT_WIFI_SSID ""
@@ -52,6 +52,9 @@
 
 // ---- Heartbeat (healthchecks.io 등: 주기적으로 URL을 호출해 기기가 살아 있음을 알림) ----
 #define HB_INTERVAL_SEC 300  // 5분. healthchecks.io 체크의 Period를 5분, Grace를 5~10분으로
+
+// ---- ntfy 명령 토픽 (update / check / reboot 메시지를 받아 실행) ----
+#define CMD_POLL_SEC 120  // 새 메시지 확인 주기
 
 // ---- 펌웨어 업데이트 (GitHub Releases, 서명 확인 후 웹 UI에서 설치) ----
 #define OTA_REPO         "Leepy0/DoorKey"
